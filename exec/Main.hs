@@ -51,25 +51,30 @@ addSomething w = do
   worldCreateBodyAndFixture w bod someFix
   return bod
 
+recenterSomething :: BodyDefToken -> IO ()
+recenterSomething t = do
+  print "Hi"
+  bodyDefSetX t 0
+  bodyDefSetY t 0
 
 run :: MonadWidget t m => WorldToken -> m ()
 run w = do
   b <- button "Grav"
+  d <- button "Recenter"
   canv <- fst <$> elAttr' "canvas" ("id" =: "canvas"
                                    <> "width" =: "500"
                                    <> "height" =:  "600") blank
   pb <- getPostBuild
-  pb' <- delay 2 pb
   t0 <- liftIO getCurrentTime
   ts <- tickLossy (1/60) t0
-  ts' <- delay 2 ts
-  ps  <- liftIO newStdGen >>= \g -> poissonLossy g 3 t0
-  ps' <- delay 3 ps
+  ps  <- liftIO newStdGen >>= \g -> poissonLossy g 0.1 t0
   performEvent_ $ (liftIO (randomRIO (-10,10) >>= \g -> worldSetGravity w (Vec2 0 g))) <$ b
   -- performEvent_ (liftIO (js_dirtyDrawSetup w) <$ pb)
   performEvent_ (liftIO (drawSetup w (castToHTMLCanvasElement $ _element_raw canv)) <$ pb)
   performEvent_ (liftIO (js_dirtyUpdate w) <$ ts)
   performEvent_ (liftIO (addSomething w >> return ()) <$ ps)
+  c <- liftIO $ addSomething w
+  cs <- performEvent_ (liftIO (recenterSomething c) <$ d)
   e <- fmap fst $ el' "div" $ text "Hello"
   performEvent_ (liftIO (js_showWorld w) <$ domEvent Click e)
   display . fmap (id :: Int -> Int) =<< count (domEvent Click e)
