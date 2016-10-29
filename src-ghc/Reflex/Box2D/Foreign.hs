@@ -34,6 +34,13 @@ fixtureDefSetRestitution = undefined
 fixtureDefSetShape :: FixtureToken -> Shape -> IO ()
 fixtureDefSetShape  = undefined
 
+bodyDefSetX :: BodyToken -> Double -> IO ()
 bodyDefSetX = undefined
+bodyDefSetY :: BodyToken -> Double -> IO ()
 bodyDefSetY = undefined
+bodyDefGetX :: BodyToken -> IO Double
+bodyDefGetX = undefined
+bodyDefGetY :: BodyToken -> IO Double
+bodyDefGetY = undefined
+
 bodyDefSetType = undefined

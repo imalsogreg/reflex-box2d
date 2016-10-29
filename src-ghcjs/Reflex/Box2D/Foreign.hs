@@ -5,7 +5,6 @@ import GHCJS.DOM.Types (HTMLCanvasElement, unHTMLCanvasElement)
 import GHCJS.Marshal
 import Reflex.Box2D.Types
 
-
 type WorldToken = JSVal
 type FixtureToken = JSVal
 type BodyToken = JSVal
@@ -52,8 +51,16 @@ bodyDefSetX = js_bodyDefSetX
 bodyDefSetY :: BodyDefToken -> Double -> IO ()
 bodyDefSetY = js_bodyDefSetY
 
+bodyDefGetX :: BodyDefToken -> IO Double
+bodyDefGetX = js_bodyDefGetX
+
+bodyDefGetY :: BodyDefToken -> IO Double
+bodyDefGetY = js_bodyDefGetY
+
+
 bodyDefSetType :: BodyDefToken -> BodyType -> IO ()
 bodyDefSetType dt bt = js_bodyDefSetType dt (fromEnum bt)
+
 
 
 instance ToJSVal Vec2 where
