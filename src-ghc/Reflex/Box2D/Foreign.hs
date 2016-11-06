@@ -1,5 +1,6 @@
 module Reflex.Box2D.Foreign where
 
+import GHCJS.DOM.Types (HTMLCanvasElement)
 import Reflex.Box2D.Types
 
 type WorldToken = ()
@@ -13,7 +14,7 @@ makeWorld = error "makeWorld only available to ghcjs"
 worldSetGravity :: WorldToken -> Vec2 -> IO ()
 worldSetGravity w v = error "worldSetGravity only available to ghcjs"
 
-makeFixture :: IO FixtureToken -- Double -> Double -> Double -> Shape -> IO FixtureToken
+makeFixture :: BodyToken -> FixtureDef -> IO FixtureToken -- Double -> Double -> Double -> Shape -> IO FixtureToken
 makeFixture = error "makeFixture only available to ghcjs"
 
 makeBody :: IO BodyToken -- BodyType -> Double -> Double -> IO BodyToken
@@ -43,4 +44,32 @@ bodyDefGetX = undefined
 bodyDefGetY :: BodyToken -> IO Double
 bodyDefGetY = undefined
 
+bodyDefSetTransform :: BodyToken -> Vec2 -> Double -> IO ()
+bodyDefSetTransform = undefined
+
 bodyDefSetType = undefined
+
+drawSetup :: WorldToken -> HTMLCanvasElement -> IO ()
+drawSetup = undefined
+
+worldStep :: WorldToken -> Double -> Int -> Int -> IO ()
+worldStep = undefined
+
+drawDebugData :: WorldToken -> IO ()
+drawDebugData = undefined
+
+showWorld :: WorldToken -> IO ()
+showWorld = undefined
+
+worldCreateBodyAndFixture = undefined
+
+dirtyUpdate = undefined
+
+createBody :: WorldToken -> BodyDef -> IO BodyToken
+createBody = undefined
+
+bodyGetPosition :: BodyToken -> IO Vec2
+bodyGetPosition = undefined
+
+bodySetPositionAndAngle :: BodyToken -> Vec2 -> Double -> IO ()
+bodySetPositionAndAngle  = undefined

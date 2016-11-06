@@ -1,14 +1,16 @@
+{-# language FlexibleContexts  #-}
 {-# language OverloadedStrings #-}
-{-# language FlexibleContexts #-}
-{-# language RecursiveDo #-}
+{-# language RecursiveDo       #-}
+{-# LANGUAGE TypeFamilies      #-}
 
 module Main where
 
 import Control.Monad.IO.Class (liftIO)
-import Data.Monoid ((<>))
+import Data.Monoid            ((<>))
+import qualified Data.Text as T
 import Data.Traversable
 import Data.Time
-import GHCJS.DOM.Types (castToHTMLCanvasElement)
+import GHCJS.DOM.Types        (castToHTMLCanvasElement)
 import Reflex.Dom
 import Reflex.Box2D
 import Reflex.Box2D.Types
@@ -17,29 +19,55 @@ import System.Random
 -- temporary for test:
 import Reflex.Box2D.Foreign
 
-main :: IO ()
-main = mainWidget run
+main = m'
+
+m' :: IO ()
+m' = mainWidget run
 
 ------------------------------------------------------------------------------
 run :: SupportsReflexBox2D t m => m ()
 run = do
-  canv <- fst <$> elAttr'
+  pb <- getPostBuild
+  running <- toggle False =<< button "Running"
+  printW  <- button "Printing World"
+  lowerFloor <- button "LowerFloor"
+  floorY <- foldDyn (\e acc -> acc - e) 0 ((-1) <$ lowerFloor)
+  moveBall <- foldDyn (\e acc -> acc + e) 0 . (1 <$) =<< button "MoveBall"
+  (canv, _) <- elAttr' "canvas"
     ("id"     =: "canvas" <> "width"  =: "500"    <> "height" =: "500") blank
   let canvEl = castToHTMLCanvasElement $ _element_raw canv
-  rec ff <- fixture def { fixtureDefConfig_initialShape = ShapeBox 10 0.5 }
-      f <- body w def { bodyDefConfig_initialFixtures = "floor" =: ff
-                      , bodyDefConfig_bodyType = BodyTypeStatic }
-      bf <- fixture def { fixtureDefConfig_initialShape = ShapeCircle 0.6 }
-      b <- body w def { bodyDefConfig_initialFixtures = "floor" =: ff
-                      , bodyDefConfig_bodyType = BodyTypeDynamic }
-      w <- world def { worldConfig_initialBodies = "f" =: f <> "b" =: b }
-  liftIO $ drawSetup ( drawSetup (worldToken w canvEl))
-  performEvent ()
+      floorFConf   = def { fixtureConfig_initialShape = ShapeBox 10 0.5 }
+      floorBConf = def { bodyConfig_initialFixtures = "floor" =: floorFConf
+                       , bodyConfig_initialPosition = (Vec2 10 10, 0)
+                       , bodyConfig_modifyPosition =
+                           ffor (updated floorY) $ \y' -> \_ -> (Vec2 10 y',0)
+                       , bodyConfig_bodyType = BodyTypeStatic
+                       }
+      ballFConf = def { fixtureConfig_initialShape = ShapeCircle 0.6 }
+      ballBConf =  def { bodyConfig_initialFixtures = "floor" =: ballFConf
+                       , bodyConfig_initialPosition = (Vec2 3 3, 0)
+                       , bodyConfig_modifyPosition =
+                           ffor (updated moveBall) $ (\x' -> \(Vec2 x y, r) -> (Vec2 x' (y - 0.5), r))
+                       , bodyConfig_bodyType = BodyTypeDynamic }
+  w <- world (Just canvEl)
+       def { worldConfig_initialBodies = "f" =: floorBConf <> "b" =: ballBConf
+           , worldConfig_physicsRunning = current running
+           , worldConfig_drawRunning    = current running
+           }
+
+  liftIO (drawSetup (world_token w ) canvEl)
+  performEvent $ liftIO (showWorld $ world_token w) <$ printW
+  -- dynText $ traceDyn "ballpos" $ (T.pack . show) <$> bodyDef_position b
   return ()
 
 
--- main' :: IO ()
--- main' = setup >>= \w -> mainWidget (run' w)
+-- m :: IO ()
+-- m = setup >>= \w -> (mainWidget $ do
+--                            printBtn <- button "Print"
+--                            performEvent $ (liftIO $ showWorld w) <$ printBtn
+--                            run' w
+--                        )
+
 
 -- setup :: IO WorldToken
 -- setup = do
@@ -93,10 +121,10 @@ run = do
 --   performEvent_ $ (liftIO (randomRIO (-10,10) >>= \g -> worldSetGravity w (Vec2 0 g))) <$ b
 --   -- performEvent_ (liftIO (js_dirtyDrawSetup w) <$ pb)
 --   performEvent_ (liftIO (drawSetup w (castToHTMLCanvasElement $ _element_raw canv)) <$ pb)
---   performEvent_ (liftIO (js_dirtyUpdate w) <$ ts)
+--   performEvent_ (liftIO (dirtyUpdate w) <$ ts)
 --   performEvent_ (liftIO (addSomething w >> return ()) <$ ps)
 --   c <- liftIO $ addSomething w
 --   cs <- performEvent_ (liftIO (recenterSomething c) <$ d)
 --   e <- fmap fst $ el' "div" $ text "Hello"
---   performEvent_ (liftIO (js_showWorld w) <$ domEvent Click e)
+--   performEvent_ (liftIO (showWorld w) <$ domEvent Click e)
 --   display . fmap (id :: Int -> Int) =<< count (domEvent Click e)
