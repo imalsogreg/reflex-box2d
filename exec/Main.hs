@@ -27,28 +27,33 @@ m' = mainWidget run
 ------------------------------------------------------------------------------
 run :: SupportsReflexBox2D t m => m ()
 run = do
+  t0 <- liftIO getCurrentTime
   pb <- getPostBuild
   running <- toggle False =<< button "Running"
   printW  <- button "Printing World"
   lowerFloor <- button "LowerFloor"
-  floorY <- foldDyn (\e acc -> acc - e) 0 ((-1) <$ lowerFloor)
+  floorY <- foldDyn (\e acc -> acc - e) 10 ((-1) <$ lowerFloor)
   moveBall <- foldDyn (\e acc -> acc + e) 0 . (1 <$) =<< button "MoveBall"
+  bumps <- tickLossy 2 t0
   (canv, _) <- elAttr' "canvas"
     ("id"     =: "canvas" <> "width"  =: "500"    <> "height" =: "500") blank
   let canvEl = castToHTMLCanvasElement $ _element_raw canv
-      floorFConf   = def { fixtureConfig_initialShape = ShapeBox 10 0.5 }
+      floorFConf   = def { fixtureConfig_initialShape = ShapeBox 20 1 }
       floorBConf = def { bodyConfig_initialFixtures = "floor" =: floorFConf
-                       , bodyConfig_initialPosition = (Vec2 10 10, 0)
+                       , bodyConfig_initialPosition = (Vec2 5 10, 0)
                        , bodyConfig_modifyPosition =
                            ffor (updated floorY) $ \y' -> \_ -> (Vec2 10 y',0)
                        , bodyConfig_bodyType = BodyTypeStatic
                        }
       ballFConf = def { fixtureConfig_initialShape = ShapeCircle 0.6 }
       ballBConf =  def { bodyConfig_initialFixtures = "floor" =: ballFConf
-                       , bodyConfig_initialPosition = (Vec2 3 3, 0)
+                       , bodyConfig_initialPosition = (Vec2 10 3, 0)
                        , bodyConfig_modifyPosition =
                            ffor (updated moveBall) $ (\x' -> \(Vec2 x y, r) -> (Vec2 x' (y - 0.5), r))
-                       , bodyConfig_bodyType = BodyTypeDynamic }
+                       , bodyConfig_bodyType = BodyTypeDynamic
+                       , bodyConfig_applyImpulse = (\(Vec2 x y,_) ->
+                         (Vec2 (0.1) (-10), Vec2 x y)) <$ bumps
+                       }
   w <- world (Just canvEl)
        def { worldConfig_initialBodies = "f" =: floorBConf <> "b" =: ballBConf
            , worldConfig_physicsRunning = current running
