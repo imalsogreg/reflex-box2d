@@ -53,15 +53,19 @@ instance Reflex t => Default (WorldConfig t) where
 
 data World t = World {
     world_token         :: WorldToken
-  , world_bodies        :: Dynamic t (Map T.Text (Body t))
   , world_physics_ticks :: Event t()
   , world_draw_ticks    :: Event t ()
   }
 
 
 -------------------------------------------------------------------------------
-world :: forall t m.SupportsReflexBox2D t m => Maybe HTMLCanvasElement -> WorldConfig t -> m (World t)
-world canv WorldConfig{..} = do
+world'
+  :: forall t m a.SupportsReflexBox2D t m
+  => Maybe HTMLCanvasElement
+  -> WorldConfig t
+  -> (World t -> m a)
+  -> m (World t, a)
+world' canv WorldConfig{..} children = do
   w <- liftIO $ makeWorld worldConfig_initialGravity
                           worldConfig_initialSleepable
   maybe (return ()) (liftIO . drawSetup w) canv
@@ -74,19 +78,28 @@ world canv WorldConfig{..} = do
     (mkTicks worldConfig_physicsTicks worldConfig_physicsRunning)
     (mkTicks worldConfig_drawTicks worldConfig_drawRunning)
 
-  bodies <- listWithKeyShallowDiff
-    worldConfig_initialBodies worldConfig_setBodies $ \k v dv ->
-      widgetHold (body drawTs w v) (body drawTs w <$> dv)
-
-  let wrld = World w (joinDynThroughMap bodies) physicsTs drawTs
+  let wrld = World w physicsTs drawTs
 
   performEvent $ (liftIO $ worldStep w (1/60) 10 10) <$ physicsTs
   -- TODO use appropriate timestep. 1/60 is only sometimes right by accident
 
   performEvent $ (liftIO $ drawDebugData w) <$ drawTs
 
-  return wrld
+  a <- children wrld
 
+  return (wrld, a)
+
+-------------------------------------------------------------------------------
+world
+  :: forall t m a.SupportsReflexBox2D t m
+  => Maybe HTMLCanvasElement
+  -> WorldConfig t
+  -> (World t -> m a)
+  -> m a
+world canv wConf children = snd <$> world' canv wConf children
+
+
+-------------------------------------------------------------------------------
 data FixtureConfig t = FixtureConfig
   { fixtureConfig_initialDensity     :: Double
   , fixtureConfig_setDensity         :: Event t Double
@@ -101,6 +114,7 @@ data FixtureConfig t = FixtureConfig
 instance Reflex t => Default (FixtureConfig t) where
   def = FixtureConfig 1 never 0.5 never 0.2 never (ShapeCircle 1) never
 
+-------------------------------------------------------------------------------
 data Fixture t = Fixture {
     fixture_density     :: Dynamic t Double
   , fixture_friction    :: Dynamic t Double
@@ -109,9 +123,9 @@ data Fixture t = Fixture {
   , fixture_token       :: FixtureToken
   }
 
-fixture :: SupportsReflexBox2D t m => WorldToken -> BodyToken -> FixtureConfig t -> m (Fixture t)
-fixture w b (FixtureConfig d0 dd f0 df r0 dr s0 ds) = do
-  f <- liftIO $ makeFixture b (FixtureDef d0 f0 r0 s0)
+fixture :: SupportsReflexBox2D t m => Body t -> FixtureConfig t -> m (Fixture t)
+fixture b (FixtureConfig d0 dd f0 df r0 dr s0 ds) = do
+  f <- liftIO $ makeFixture (body_token b) (FixtureDef d0 f0 r0 s0)
   -- density <- setAndTrack d0 dd (fixtureSetDensity f) never
   -- friction <- setAndTrack f0 df (fixtureSetFriction f) never
   -- shape <- setAndTrack s0 ds (fixtureSetShape f) never
@@ -127,26 +141,32 @@ data BodyConfig t = BodyConfig
   { bodyConfig_bodyType :: BodyType
   , bodyConfig_initialPosition :: (Vec2, Double)
   , bodyConfig_modifyPosition :: Event t ((Vec2, Double) -> (Vec2, Double))
-  , bodyConfig_initialFixtures :: Map T.Text (FixtureConfig t)
-  , bodyConfig_setFixtures :: Event t (Map T.Text (Maybe (FixtureConfig t)))
   , bodyConfig_applyImpulse :: Event t ((Vec2,Double) -> (Vec2,Vec2))
   }
 
 instance Reflex t => Default (BodyConfig t) where
-  def = BodyConfig BodyTypeDynamic (Vec2 5 5, 0) never mempty never never
+  def = BodyConfig BodyTypeDynamic (Vec2 5 5, 0) never never
 
 
 data Body t = Body {
     body_type      :: BodyType
   , body_position  :: Dynamic t (Vec2, Double)
   , body_token     :: BodyToken
-  , body_fixtures  :: Dynamic t (Map T.Text (Fixture t))
   , body_contacts  :: Dynamic t () -- TODO
   }
 
+trackChildren c0 dc f = listWithKeyShallowDiff c0 dc $ \k v dv ->
+  widgetHold (f v) (f <$> dv)
+
 -------------------------------------------------------------------------------
-body :: SupportsReflexBox2D t m => Event t () -> WorldToken -> BodyConfig t -> m (Body t)
-body sampleTicks w (BodyConfig bType (p0,a0) dp f0 df imp) = do
+body'
+  :: SupportsReflexBox2D t m
+  => Event t ()
+  -> WorldToken
+  -> BodyConfig t
+  -> (Body t -> m a)
+  -> m (Body t, a)
+body' sampleTicks w (BodyConfig bType (p0,a0) dp imp) children = do
   b <- liftIO $ createBody w (BodyDef bType p0 a0)
   -- liftIO $ bodySetType b bType >> bodySetX b x0 >> bodySetY b y0
   -- liftIO $ bodySetType b bType >> bodySetPositionAndAngle b p0 a0
@@ -165,9 +185,6 @@ body sampleTicks w (BodyConfig bType (p0,a0) dp f0 df imp) = do
 
   p <- holdDyn (p0,a0) $ leftmost [pForced, pSimulation]
 
-  fixtures <- listWithKeyShallowDiff f0 df $ \k v dv ->
-    widgetHold (fixture w b v) (fixture w b <$> dv)
-
   performEvent $ ffor imp $ \f -> liftIO $ do
     p <- bodyGetPosition b
     r <- return 0 -- TODO: get angle
@@ -175,7 +192,19 @@ body sampleTicks w (BodyConfig bType (p0,a0) dp f0 df imp) = do
     bodyApplyImpulse b impulse center
   let contacts = constDyn ()
 
-  return $ Body bType p b (joinDynThroughMap fixtures) contacts
+  let bod = Body bType p b contacts
+  a <- children bod
+  return $ (bod, a)
+
+body
+  :: SupportsReflexBox2D t m
+  => Event t ()
+  -> WorldToken
+  -> BodyConfig t
+  -> (Body t -> m a)
+  -> m a
+body sampleTicks w
+  bodyConf children = snd <$> body' sampleTicks w bodyConf children
 
 
 setAndTrack
